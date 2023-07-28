@@ -176,6 +176,9 @@ else
     fi
 fi
 
+# Add build type to output folder
+BUILDOUT="${BUILDOUT}/${BUILDTYPE}"
+
 # Make custom output directory if it doesn't exist
 if [ ! -z "$BUILDOUT" ] && [ ! -d "$BUILDOUT" ]; then
     mkdir -p "$BUILDOUT"
@@ -191,8 +194,8 @@ LIBROOT="${BUILDOUT}/${BUILDTARGET}/lib3"
 LIBINST="${BUILDOUT}/${BUILDTARGET}/install"
 
 PKGNAME="${LIBNAME}.a.xcframework"
-PKGROOT="${BUILDOUT}/pkg/${BUILDTYPE}/${PKGNAME}"
-PKGFILE="${BUILDOUT}/pkg/${BUILDTYPE}/${PKGNAME}.zip"
+PKGROOT="${BUILDOUT}/pkg/${PKGNAME}"
+PKGFILE="${BUILDOUT}/pkg/${PKGNAME}.zip"
 
 # iOS toolchain
 if [[ $BUILDTARGET == *"ios"* ]]; then
