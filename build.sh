@@ -156,12 +156,19 @@ NUMCPUS=$(sysctl -n hw.physicalcpu)
 
 #--------------------------------------------------------------------
 # Get root script path
-SCRIPTPATH=$(realpath $0)
-if [ ! -z "$SCRIPTPATH" ]; then
-    ROOTDIR=$(dirname $SCRIPTPATH)
-else
-    SCRIPTPATH=.
-    ROOTDIR=.
+if [ ! -z "$0" ] && [ ! -z "$(which realpath)" ]; then
+    SCRIPTPATH=$(realpath $0)
+fi
+ROOTDIR="$GITHUB_WORKSPACE"
+if [ -z "$ROOTDIR" ]; then
+    if [[ -z "$SCRIPTPATH" ]] || [[ "." == "$SCRIPTPATH" ]]; then
+        ROOTDIR=$(pwd)
+    elif [ ! -z "$SCRIPTPATH" ]; then
+        ROOTDIR=$(dirname $SCRIPTPATH)
+    else
+        SCRIPTPATH=.
+        ROOTDIR=.
+    fi
 fi
 
 #--------------------------------------------------------------------
@@ -264,6 +271,8 @@ showParams()
     Log "BUILDWHAT      : ${BUILDWHAT}"
     Log "BUILDTYPE      : ${BUILDTYPE}"
     Log "BUILDTARGET    : ${BUILDTARGET}"
+    Log "0              : ${0}"
+    Log "SCRIPTPATH     : ${SCRIPTPATH}"
     Log "ROOTDIR        : ${ROOTDIR}"
     Log "BUILDOUT       : ${BUILDOUT}"
     Log "TARGET         : ${TARGET}"
@@ -277,6 +286,7 @@ showParams()
     echo ""
 }
 showParams
+
 
 #-------------------------------------------------------------------
 # Rebuild lib and copy files if needed

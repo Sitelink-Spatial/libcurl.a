@@ -14,5 +14,13 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Build cesium-native
+      - name: Build
         run: ./build-all.sh release
+
+      - name: Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: Swift package
+          path: |
+            build/release/pkg/libcurl.a.xcframework.zip
+            build/release/pkg/libcurl.a.xcframework.zip.sha256.txt
