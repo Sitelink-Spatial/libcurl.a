@@ -330,6 +330,8 @@ if    [ ! -z "${REBUILDLIBS}" ] \
     cmake . -B ./build -DCMAKE_BUILD_TYPE=${BUILDTYPE} \
                     ${TOOLCHAIN} \
                     -DHTTP_ONLY=ON \
+                    -DCURL_USE_LIBSSH=OFF \
+                    -DCURL_USE_LIBSSH2=OFF \
                     -DBUILD_CURL_EXE=OFF \
                     -DCURL_USE_SECTRANSP=ON \
                     -DBUILD_SHARED_LIBS=OFF \

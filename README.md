@@ -19,7 +19,7 @@ iOS build for [libcurl](https://curl.se/dev/source.html)
     .binaryTarget(
         name: "libcurl.a",
         url: "https://github.com/Imajion/libcurl.a/releases/download/r2/libcurl.a.xcframework.zip",
-        checksum: "0190b2c77d6e9fc33c7007c75330a58b3f7d22654f16de6c1eeadc65580aa95e"
+        checksum: "7c57ba4bec5a3ac8738040c98eb04b91529922eb04a2f465847f02e146519ebb"
     )
 
 ```
