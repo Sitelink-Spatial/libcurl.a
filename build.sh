@@ -3,7 +3,7 @@
 # Examples:
 #
 #   Build for desktop
-#   > ./build.sh build release arm64-apple-macos13.0
+#   > ./build.sh build release arm64-apple-macos12.0
 #
 #   Build for iphone
 #   > ./build.sh build release arm64-apple-ios12.0
@@ -29,6 +29,8 @@
 # Script params
 
 LIBNAME="libcurl"
+LIBREPO="https://github.com/curl/curl.git"
+LIBVER="curl-8_2_0"
 
 # What to do (build, test)
 BUILDWHAT="$1"
@@ -125,9 +127,16 @@ fi
 
 # ios-arm64_x86_64-simulator
 if [[ $BUILDTARGET == *"ios"* ]]; then
-    TGT_OS="ios"
+    if [[ $BUILDTARGET == *"simulator"* ]]; then
+        TGT_OS="ios"
+        TGT_SUPPORTS="iphonesimulator"
+    else
+        TGT_OS="ios"
+        TGT_SUPPORTS="ios"
+    fi
 else
     TGT_OS="macos"
+    TGT_SUPPORTS="macos"
 fi
 
 if [[ $BUILDTARGET == *"arm64"* ]]; then
@@ -149,6 +158,9 @@ fi
 TGT_OPTS=
 if [[ $BUILDTARGET == *"simulator"* ]]; then
     TGT_OPTS="-simulator"
+fi
+if [[ $BUILDTARGET == *"xbuild"* ]]; then
+    TGT_OPTS="-xbuild"
 fi
 
 # NUMCPUS=1
@@ -201,8 +213,10 @@ LIBROOT="${BUILDOUT}/${BUILDTARGET}/lib3"
 LIBINST="${BUILDOUT}/${BUILDTARGET}/install"
 
 PKGNAME="${LIBNAME}.a.xcframework"
-PKGROOT="${BUILDOUT}/pkg/${PKGNAME}"
-PKGFILE="${BUILDOUT}/pkg/${PKGNAME}.zip"
+PKGBASE="${BUILDOUT}/pkg"
+PKGBUILD="${PKGBASE}/build"
+PKGROOT="${PKGBASE}/${PKGNAME}"
+PKGFILE="${PKGBASE}/${PKGNAME}.zip"
 
 # iOS toolchain
 if [[ $BUILDTARGET == *"ios"* ]]; then
@@ -230,7 +244,7 @@ if [[ $BUILDTARGET == *"ios"* ]]; then
     else
         if [ "${TGT_ARCH}" == "x86" ]; then
             TGT_PLATFORM="OS"
-        elif [ "${TGT_ARCH}" == "x86_64" ]; then
+        elif [ "${TGT_ARCH}" == *"x86_64"* ]; then
             TGT_ARCH="arm64_x86_64"
             TGT_PLATFORM="OS64COMBINED"
         else
@@ -243,6 +257,8 @@ if [[ $BUILDTARGET == *"ios"* ]]; then
                -DCMAKE_TOOLCHAIN_FILE=${LIBROOT}/ios-cmake/ios.toolchain.cmake \
                -DPLATFORM=${TGT_PLATFORM} \
                -DENABLE_BITCODE=OFF \
+               -DENABLE_ARC=OFF \
+               -DENABLE_VISIBILITY=ON \
                -DDEPLOYMENT_TARGET=$TGT_OSVER \
                "
 else
@@ -268,6 +284,8 @@ showParams()
     echo ""
     Log "#--------------------------------------------------------------------"
     Log "LIBNAME        : ${LIBNAME}"
+    Log "LIBREPO        : ${LIBREPO}"
+    Log "LIBVER         : ${LIBVER}"
     Log "BUILDWHAT      : ${BUILDWHAT}"
     Log "BUILDTYPE      : ${BUILDTYPE}"
     Log "BUILDTARGET    : ${BUILDTARGET}"
@@ -276,7 +294,9 @@ showParams()
     Log "ROOTDIR        : ${ROOTDIR}"
     Log "BUILDOUT       : ${BUILDOUT}"
     Log "TARGET         : ${TARGET}"
+    Log "OS             : ${TGT_OS}"
     Log "OSVER          : ${TGT_OSVER}"
+    Log "SUPPORTS       : ${TGT_SUPPORTS}"
     Log "ARCH           : ${TGT_ARCH}"
     Log "PLATFORM       : ${TGT_PLATFORM}"
     Log "PKGNAME        : ${PKGNAME}"
@@ -306,23 +326,23 @@ if [ ! -d "${LIBROOT}" ]; then
     REBUILDLIBS="YES"
 fi
 
-
 LIBBUILD="${LIBROOT}/${LIBNAME}"
 LIBBUILDOUT="${LIBBUILD}/build"
 LIBINSTFULL="${LIBINST}/${BUILDTARGET}/${BUILDTYPE}"
+
 
 #-------------------------------------------------------------------
 # Checkout and build library
 #-------------------------------------------------------------------
 if    [ ! -z "${REBUILDLIBS}" ] \
    || [[ $BUILDWHAT == *"rebuild"* ]] \
-   || [ ! -f "${LIBINSTFULL}/lib/libcurl.a" ]; then
+   || [ ! -f "${LIBINSTFULL}/lib/${LIBNAME}.a" ]; then
 
     # Remove existing package
     rm -Rf "${PKGROOT}/${TARGET}"
 
-    echo "\n====================== BUILD CURL =====================\n"
-    gitCheckout "https://github.com/curl/curl.git" "curl-8_2_0" "${LIBBUILD}"
+    echo "\n====================== BUILD ${LIBNAME} =====================\n"
+    gitCheckout ${LIBREPO} ${LIBVER} "${LIBBUILD}"
 
     cd "${LIBBUILD}"
 
@@ -344,8 +364,8 @@ if    [ ! -z "${REBUILDLIBS}" ] \
         echo "\n==================== XCODE BUILDING ====================\n"
 
         # Get targets: xcodebuild -list -project mylib.xcodeproj
-        xcodebuild -project "${LIBBUILDOUT}/curl.xcodeproj" \
-                   -target curl_static \
+        xcodebuild -project "${LIBBUILDOUT}/${LIBNAME}.xcodeproj" \
+                   -target "${LIBNAME}" \
                    -configuration Release \
                    -sdk iphonesimulator
         exitOnError "Failed to xbuild ${LIBNAME}"
@@ -387,7 +407,7 @@ if    [ ! -z "${REBUILDLIBS}" ] \
     # Copy include files
     cp -R "${LIBINSTFULL}/." "${PKGROOT}/${TARGET}/"
 
-    mv ${LIBINSTFULL}/lib/libcurl.a "${PKGROOT}/${TARGET}/${LIBNAME}.a"
+    mv ${LIBINSTFULL}/lib/${LIBNAME}.a "${PKGROOT}/${TARGET}/${LIBNAME}.a"
     exitOnError "Failed to build library ${LIBNAME}"
 
     lipo -info "${PKGROOT}/${TARGET}/${LIBNAME}.a"
@@ -399,6 +419,7 @@ if    [ ! -z "${REBUILDLIBS}" ] \
     cp "${ROOTDIR}/Info.target.plist.in" "${PKGROOT}/${TARGET}/Info.target.plist"
     sed -i '' "s|%%TARGET%%|${TARGET}|g" "${PKGROOT}/${TARGET}/Info.target.plist"
     sed -i '' "s|%%OS%%|${TGT_OS}|g" "${PKGROOT}/${TARGET}/Info.target.plist"
+    sed -i '' "s|%%SUPPORTS%%|${TGT_SUPPORTS}|g" "${PKGROOT}/${TARGET}/Info.target.plist"
     sed -i '' "s|%%ARCH%%|${TGT_ARCH}|g" "${PKGROOT}/${TARGET}/Info.target.plist"
     sed -i '' "s|%%INCPATH%%|${INCPATH}|g" "${PKGROOT}/${TARGET}/Info.target.plist"
     sed -i '' "s|%%LIBPATH%%|${LIBPATH}|g" "${PKGROOT}/${TARGET}/Info.target.plist"
@@ -411,30 +432,101 @@ if    [ ! -z "${REBUILDLIBS}" ] \
 
 fi
 
-
 #-------------------------------------------------------------------
 # Create full package
 #-------------------------------------------------------------------
-if [ -d "${PKGROOT}" ]; then
+if [[ $BUILDWHAT == *"mpack"* ]]; then
 
-    cd "${PKGROOT}"
+    if [ -d "${PKGROOT}" ]; then
 
-    TARGETINFO=
-    for SUB in */; do
-        echo "Adding: $SUB"
-        if [ -f "${SUB}/Info.target.plist" ]; then
-            TARGETINFO="$TARGETINFO$(cat "${SUB}/Info.target.plist")"
+        cd "${PKGROOT}"
+
+        TARGETINFO=
+        for SUB in */; do
+            echo "Adding: $SUB"
+            if [ -f "${SUB}/Info.target.plist" ]; then
+                TARGETINFO="$TARGETINFO$(cat "${SUB}/Info.target.plist")"
+            fi
+        done
+
+        if [ ! -z "$TARGETINFO" ]; then
+
+            TARGETINFO=""${TARGETINFO//$'\n'/\\n}""
+
+            cp "${ROOTDIR}/Info.plist.in" "${PKGROOT}/Info.plist"
+            sed -i '' "s|%%TARGETS%%|${TARGETINFO}|g" "${PKGROOT}/Info.plist"
+
+            cd "${PKGROOT}/.."
+
+            # Remove old package if any
+            if [ -f "${PKGFILE}" ]; then
+                rm "${PKGFILE}"
+            fi
+
+            # Create new package
+            zip -r "${PKGFILE}" "$PKGNAME" -x "*.DS_Store"
+
+            # Calculate sha256
+            openssl dgst -sha256 -r < "${PKGFILE}" | cut -f1 -d' ' > "${PKGFILE}.sha256.txt"
+
+            cd "${BUILDOUT}"
+
         fi
-    done
+    fi
 
-    if [ ! -z "$TARGETINFO" ]; then
+else
 
-        TARGETINFO=""${TARGETINFO//$'\n'/\\n}""
+    if [ -d "${PKGROOT}" ]; then
 
-        cp "${ROOTDIR}/Info.plist.in" "${PKGROOT}/Info.plist"
-        sed -i '' "s|%%TARGETS%%|${TARGETINFO}|g" "${PKGROOT}/Info.plist"
+        cd "${PKGROOT}"
 
-        cd "${PKGROOT}/.."
+        # Refresh package build directory
+        if [ -d "${PKGBUILD}" ]; then
+            rm -Rf "${PKGBUILD}"
+        fi
+        mkdir -p "${PKGBUILD}"
+
+        LIPO_CMD="lipo -create"
+        XCFR_CMD="xcodebuild -create-xcframework"
+        for SUB in */; do
+            SUB="${SUB%/}"
+            INCPATH="${SUB}/include"
+            LIBPATH="${SUB}/${LIBNAME}.a"
+            LIBBPATH="${PKGBUILD}/${LIBNAME}-${SUB}.a"
+            echo "\n=======================================================\n"
+            echo "SUB     : $SUB"
+            echo "INCPATH : $INCPATH"
+            echo "LIBPATH : $LIBPATH"
+            echo "LIBBPATH: $LIBBPATH"
+
+            if [ ! -f "${LIBPATH}" ]; then
+                exitWithError "Failed to find library: ${LIBPATH}"
+            fi
+            if [ ! -d "${INCPATH}" ]; then
+                exitWithError "Failed to find include: ${INCPATH}"
+            fi
+            cp "${LIBPATH}" "${LIBBPATH}"
+            LIPO_CMD="$LIPO_CMD ${LIBPATH}"
+            XCFR_CMD="$XCFR_CMD -library ${LIBBPATH} -headers ${INCPATH}"
+        done
+
+        LIBOUT="${PKGBUILD}/${PKGNAME}.a"
+        LIPO_CMD="$LIPO_CMD -output ${LIBOUT}"
+
+        PKGOUT="${PKGBUILD}/${PKGNAME}"
+        XCFR_CMD="$XCFR_CMD -output ${PKGOUT}"
+
+        echo "\n=======================================================\n"
+        echo "LIPO_CMD : $LIPO_CMD"
+        echo "XCFR_CMD : $XCFR_CMD"
+
+        # eval $LIPO_CMD
+        # exitOnError "Failed to create lipo"
+
+        eval $XCFR_CMD
+        exitOnError "Failed to create xcframework"
+
+        cd "${PKGBUILD}"
 
         # Remove old package if any
         if [ -f "${PKGFILE}" ]; then
@@ -445,11 +537,12 @@ if [ -d "${PKGROOT}" ]; then
         zip -r "${PKGFILE}" "$PKGNAME" -x "*.DS_Store"
 
         # Calculate sha256
-        openssl dgst -sha256 < "${PKGFILE}" > "${PKGFILE}.sha256.txt"
+        openssl dgst -sha256 -r < "${PKGFILE}" | cut -f1 -d' ' > "${PKGFILE}.sha256.txt"
 
         cd "${BUILDOUT}"
 
     fi
+
 fi
 
 showParams
