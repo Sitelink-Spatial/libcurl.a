@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# https://rhonabwy.com/2023/02/10/creating-an-xcframework/
+
 # Examples:
 #
 #   Build for desktop
@@ -55,7 +57,7 @@ Log()
 exitWithError()
 {
     echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-    echo "$@"
+    echo "! $@"
     echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
     exit -1
 }
@@ -139,18 +141,18 @@ else
     TGT_SUPPORTS="macos"
 fi
 
-if [[ $BUILDTARGET == *"arm64"* ]]; then
-    if [[ $BUILDTARGET == *"x86_64"* ]]; then
+if [[ $BUILDTARGET == *"arm64_x86_64"* || $BUILDTARGET == *"x86_64_arm64"* ]]; then
         TGT_ARCH="arm64_x86_64"
-    elif [[ $BUILDTARGET == *"x86"* ]]; then
-        TGT_ARCH="arm64_x86"
-    else
+    TGT_ARCHS="arm64;x86_64"
+elif [[ $BUILDTARGET == *"arm64"* ]]; then
         TGT_ARCH="arm64"
-    fi
+    TGT_ARCHS="arm64"
 elif [[ $BUILDTARGET == *"x86_64"* ]]; then
     TGT_ARCH="x86_64"
+    TGT_ARCHS="x86_64"
 elif [[ $BUILDTARGET == *"x86"* ]]; then
     TGT_ARCH="x86"
+    TGT_ARCHS="x86"
 else
     exitWithError "Invalid architecture : $BUILDTARGET"
 fi
@@ -226,14 +228,17 @@ if [[ $BUILDTARGET == *"ios"* ]]; then
         TGT_OSVER="14.0"
     fi
 
-    gitCheckout "https://github.com/leetal/ios-cmake.git" "4.3.0" "${LIBROOT}/ios-cmake"
+    gitCheckout "https://github.com/leetal/ios-cmake.git" "4.5.0" "${LIBROOT}/ios-cmake"
 
     if [[ $BUILDWHAT == *"xbuild"* ]]; then
         TOOLCHAIN="${TOOLCHAIN} -GXcode"
     fi
 
     # https://github.com/leetal/ios-cmake/blob/master/ios.toolchain.cmake
-    if [[ $BUILDTARGET == *"simulator"* ]]; then
+    if [[ $BUILDTARGET == *"combined"* ]]; then
+        TGT_PLATFORM="OS64COMBINED"
+        TOOLCHAIN="${TOOLCHAIN} -GXcode"
+    elif [[ $BUILDTARGET == *"simulator"* ]]; then
         if [ "${TGT_ARCH}" == "x86" ]; then
             TGT_PLATFORM="SIMULATOR"
         elif [[ "${TGT_ARCH}" == "x86_64" ]]; then
@@ -242,14 +247,13 @@ if [[ $BUILDTARGET == *"ios"* ]]; then
             TGT_PLATFORM="SIMULATORARM64"
         fi
     else
-        if [ "${TGT_ARCH}" == "x86" ]; then
-            TGT_PLATFORM="OS"
-        elif [[ "${TGT_ARCH}" == *"x86_64"* ]]; then
-            TGT_ARCH="arm64_x86_64"
+        if [[ "${TGT_ARCH}" == "arm64" ]]; then
+            TGT_PLATFORM="OS64"
+        elif [[ "${TGT_ARCH}" == "arm64_x86_64" ]]; then
             TGT_PLATFORM="OS64COMBINED"
             TOOLCHAIN="${TOOLCHAIN} -GXcode"
         else
-            TGT_PLATFORM="OS64"
+            TGT_PLATFORM="OS"
         fi
     fi
 
@@ -262,6 +266,12 @@ if [[ $BUILDTARGET == *"ios"* ]]; then
                -DENABLE_VISIBILITY=ON \
                -DDEPLOYMENT_TARGET=$TGT_OSVER \
                "
+    if [ ! -z "${TGT_ARCHS}" ]; then
+        TOOLCHAIN="${TOOLCHAIN} \
+                   -DARCHS=${TGT_ARCHS} \
+                   "
+    fi
+
 else
     TGT_OSVER=$(extractVersion "$BUILDTARGET" "macos")
     if [ -z "$TGT_OSVER" ]; then
@@ -270,7 +280,6 @@ else
 
     TOOLCHAIN="${TOOLCHAIN} \
                -DCMAKE_OSX_DEPLOYMENT_TARGET=$TGT_OSVER \
-               -DCMAKE_OSX_ARCHITECTURES=$TGT_ARCH
                "
 fi
 
@@ -299,10 +308,14 @@ showParams()
     Log "OSVER          : ${TGT_OSVER}"
     Log "SUPPORTS       : ${TGT_SUPPORTS}"
     Log "ARCH           : ${TGT_ARCH}"
+    Log "ARCHS          : ${TGT_ARCHS}"
     Log "PLATFORM       : ${TGT_PLATFORM}"
+    Log "OPTS           : ${TGT_OPTS}"
     Log "PKGNAME        : ${PKGNAME}"
     Log "PKGROOT        : ${PKGROOT}"
     Log "LIBROOT        : ${LIBROOT}"
+    Log "TOOLCHAIN      : "
+    echo "${TOOLCHAIN}" | tr -s ' ' '\n' | sed 's/^/>>>>>>                : /'
     Log "#--------------------------------------------------------------------"
     echo ""
 }
@@ -326,6 +339,7 @@ if [ ! -d "${LIBROOT}" ]; then
 
     REBUILDLIBS="YES"
 fi
+
 
 LIBBUILD="${LIBROOT}/${LIBNAME}"
 LIBBUILDOUT="${LIBBUILD}/build"
